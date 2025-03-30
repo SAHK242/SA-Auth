@@ -12,7 +12,6 @@ func NewConfig() cfg.Config {
 			"DB_PORT",
 			"DB_USER",
 			"DB_PASS",
-			"DOMAIN_EMAIL",
 		}),
 	)
 }

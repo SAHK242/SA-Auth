@@ -10,6 +10,12 @@ import (
 	"time"
 )
 
+// Define APIs that should bypass authentication
+var publicAPIs = map[string]bool{
+	"/auth.AuthService/Login":           true,
+	"/auth.AuthService/Change-password": true,
+}
+
 // validateToken checks if the given JWT token is valid
 func validateToken(tokenString string) bool {
 	// Get the secret key from environment variables
@@ -49,6 +55,11 @@ func validateToken(tokenString string) bool {
 
 // UnaryInterceptor checks if a request has a valid token
 func UnaryInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	// Check if this API should bypass authentication
+	if publicAPIs[info.FullMethod] {
+		return handler(ctx, req) // Skip authentication
+	}
+
 	// Get metadata from the request
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {

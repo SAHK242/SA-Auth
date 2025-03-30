@@ -36,3 +36,11 @@ func (c *AuthGrpcController) CreateEmployee(ctx context.Context, req *auth.Creat
 func (c *AuthGrpcController) CreateDepartment(ctx context.Context, req *auth.CreateDepartmentRequest) (*gcommon.EmptyResponse, error) {
 	return util.WithSafeErrBiFunction(ctx, req, c.authService.CreateDepartment)
 }
+
+func (c *AuthGrpcController) ListEmployee(ctx context.Context, req *auth.ListEmployeeRequest) (*auth.ListEmployeeResponse, error) {
+	return util.WithSafeErrBiFunction(ctx, req, c.authService.ListEmployee)
+}
+
+func (c *AuthGrpcController) ListDepartment(ctx context.Context, req *auth.ListDepartmentRequest) (*auth.ListDepartmentResponse, error) {
+	return util.WithSafeErrBiFunction(ctx, req, c.authService.ListDepartment)
+}

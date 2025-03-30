@@ -40,7 +40,7 @@ func (s *authGrpcService) CreateEmployee(ctx context.Context, request *auth.Crea
 	if err != nil {
 		return nil, fmt.Errorf("failed to create employee: %v", err)
 	}
-	err = grpcutil.SendEmail(request.Email, request.LastName+request.FirstName, strings.Split(request.Email, "@")[0])
+	err = grpcutil.SendEmail(request.Email, request.LastName+" "+request.FirstName, strings.Split(request.Email, "@")[0])
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to send email: %v", err)
@@ -256,6 +256,31 @@ func (s *authGrpcService) CreateDepartment(ctx context.Context, request *auth.Cr
 		return s.authRepository.CreateDepartment(ctx, tx, request)
 	})
 	return &gcommon.EmptyResponse{}, err
+}
+
+func (s *authGrpcService) ListEmployee(ctx context.Context, request *auth.ListEmployeeRequest) (*auth.ListEmployeeResponse, error) {
+	employees, total, err := s.authRepository.FindAllEmployee(ctx, request)
+	if err != nil {
+		return nil, fmt.Errorf("error while finding employees: %v", err)
+	}
+
+	return &auth.ListEmployeeResponse{
+		PageMetadata: grpcutil.AsPageMetadata(request.Pageable, total),
+		Employees:    s.authGrpcMapper.ConvertUserSlice(employees),
+	}, nil
+
+}
+
+func (s *authGrpcService) ListDepartment(ctx context.Context, request *auth.ListDepartmentRequest) (*auth.ListDepartmentResponse, error) {
+	departments, total, err := s.authRepository.FindAllDepartment(ctx, request)
+	if err != nil {
+		return nil, fmt.Errorf("error while finding departments: %v", err)
+	}
+
+	return &auth.ListDepartmentResponse{
+		PageMetadata: grpcutil.AsPageMetadata(request.Pageable, total),
+		Departments:  s.authGrpcMapper.ConvertDepartmentSlice(departments),
+	}, nil
 }
 
 func NewAuthGrpcService(
