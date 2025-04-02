@@ -12,8 +12,8 @@ import (
 
 // Define APIs that should bypass authentication
 var publicAPIs = map[string]bool{
-	"/auth.AuthService/Login":           true,
-	"/auth.AuthService/Change-password": true,
+	"/auth.AuthService/Login":          true,
+	"/auth.AuthService/ChangePassword": true,
 }
 
 // validateToken checks if the given JWT token is valid

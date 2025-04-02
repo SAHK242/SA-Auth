@@ -13,7 +13,7 @@ func (a authGrpcMapper) ConvertUser(from *ent.Employee) *auth.User {
 		return nil
 	}
 	to := &auth.User{
-		Id:          from.EmployeeID.String(),
+		Id:          from.ID.String(),
 		FirstName:   from.FirstName,
 		LastName:    from.LastName,
 		Code:        from.Code,

@@ -16,6 +16,8 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"strings"
 	"time"
 )
@@ -88,16 +90,36 @@ func (s *authGrpcService) ChangePassword(ctx context.Context, request *auth.Chan
 
 	accountState := user.State
 
+	newPassword := request.NewPassword
+
+	newPassDec, err := openSslClient.DecryptBytes(key, []byte(newPassword), openssl.BytesToKeyMD5)
+	plainNewPassword := string(newPassDec)
+
+	if err != nil {
+		return nil, fmt.Errorf("error while decrypting new password: %v", err)
+	}
+
 	switch accountState {
 	case int32(gcommon.AccountState_ACCOUNT_STATE_ACTIVE):
 		break
 	case int32(gcommon.AccountState_ACCOUNT_STATE_INACTIVE):
 		break
 	case int32(gcommon.AccountState_ACCOUNT_STATE_LOCKED):
+		if user.Password == plainPassword {
+			e := s.updatePassword(ctx, request.Username, plainNewPassword)
+			if e != nil {
+				return nil, fmt.Errorf("error while updating password: %v", e)
+			}
+			// Update state to active
+			e = s.updateAccountState(ctx, request.Username, int32(gcommon.AccountState_ACCOUNT_STATE_ACTIVE))
+			if e != nil {
+				return nil, fmt.Errorf("error while updating account state: %v", e)
+			}
+		}
 		break
 	case int32(gcommon.AccountState_ACCOUNT_STATE_SUPER_ADMIN_LOCKED):
 		if user.Password == plainPassword {
-			e := s.updatePassword(ctx, request.Username, request.NewPassword)
+			e := s.updatePassword(ctx, request.Username, plainNewPassword)
 			if e != nil {
 				return nil, fmt.Errorf("error while updating password: %v", e)
 			}
@@ -106,6 +128,8 @@ func (s *authGrpcService) ChangePassword(ctx context.Context, request *auth.Chan
 			if e != nil {
 				return nil, fmt.Errorf("error while updating account state: %v", e)
 			}
+
+			return &gcommon.EmptyResponse{}, nil
 		}
 		break
 	case int32(gcommon.AccountState_ACCOUNT_STATE_SUPER_ADMIN_ACTIVE):
@@ -114,7 +138,7 @@ func (s *authGrpcService) ChangePassword(ctx context.Context, request *auth.Chan
 		break
 	}
 
-	return &gcommon.EmptyResponse{}, nil
+	return &gcommon.EmptyResponse{}, status.Error(codes.Unauthenticated, "invalid username or password")
 }
 
 var openSslClient = openssl.New()
@@ -123,7 +147,7 @@ func (s *authGrpcService) Login(ctx context.Context, request *auth.LoginRequest)
 	key, err := s.redis.Get(ctx, request.Username).Result()
 
 	if err != nil {
-		return nil, fmt.Errorf("invalid request - key not found: %v", err)
+		return nil, status.Error(codes.Unauthenticated, "pre-flight check failed, hash password with pre-flight key")
 	}
 
 	found := key != ""
@@ -150,8 +174,12 @@ func (s *authGrpcService) Login(ctx context.Context, request *auth.LoginRequest)
 
 	switch accountState {
 	case int32(gcommon.AccountState_ACCOUNT_STATE_ACTIVE), int32(gcommon.AccountState_ACCOUNT_STATE_SUPER_ADMIN_ACTIVE):
+		empId := ""
+		if user.Edges.Employee != nil {
+			empId = user.Edges.Employee.ID.String()
+		}
 		if CheckPasswordHash(plainPassword, user.Password) {
-			token, err := s.generateToken(ctx, request.Username)
+			token, err := s.generateToken(ctx, user.ID.String(), empId)
 			if err != nil {
 				return nil, fmt.Errorf("error while generating token: %v", err)
 			}
@@ -172,7 +200,7 @@ func (s *authGrpcService) Login(ctx context.Context, request *auth.LoginRequest)
 		return nil, fmt.Errorf("account is inactive")
 	}
 
-	return &auth.LoginResponse{}, nil
+	return &auth.LoginResponse{}, status.Error(codes.Unauthenticated, "invalid username or password")
 }
 
 func HashPassword(password string) (string, error) {
@@ -217,12 +245,13 @@ func CheckPasswordHash(password, hashedPassword string) bool {
 }
 
 // GenerateJWT creates a JWT token
-func (s *authGrpcService) GenerateJWT(userID string) (string, error) {
+func (s *authGrpcService) GenerateJWT(userID string, employeeId string) (string, error) {
 	// Secret key
 	jwtSecret := []byte(s.config.GetString("JWT_SECRET", "secret"))
 	// Create claims (payload)
 	claims := jwt.MapClaims{
-		"user_id": userID,
+		"auth_id": userID,
+		"emp_id":  employeeId,
 		"exp":     time.Now().Add(time.Hour * 24).Unix(), // Expiry: 24 hours
 		"iat":     time.Now().Unix(),                     // Issued At
 	}
@@ -239,8 +268,8 @@ func (s *authGrpcService) GenerateJWT(userID string) (string, error) {
 	return tokenString, nil
 }
 
-func (s *authGrpcService) generateToken(ctx context.Context, username string) (string, error) {
-	token, err := s.GenerateJWT(username)
+func (s *authGrpcService) generateToken(ctx context.Context, authId string, empId string) (string, error) {
+	token, err := s.GenerateJWT(authId, empId)
 	if err != nil {
 		return "", fmt.Errorf("error while generating token: %v", err)
 	}
