@@ -28,6 +28,57 @@ type authGrpcService struct {
 	authRepository    repository.AuthRepository
 	authGrpcMapper    mapper.AuthGrpcMapper
 	authGrpcValidator validator.AuthValidator
+	loginHandlers     []LoginHandler
+}
+
+type ActiveAccountHandler struct {
+	tokenGenerator func(ctx context.Context, userID, empID string) (string, error)
+	mapper         mapper.AuthGrpcMapper
+}
+
+func (h *ActiveAccountHandler) Supports(state int32) bool {
+	return state == int32(gcommon.AccountState_ACCOUNT_STATE_ACTIVE) ||
+		state == int32(gcommon.AccountState_ACCOUNT_STATE_SUPER_ADMIN_ACTIVE)
+}
+
+func (h *ActiveAccountHandler) Handle(ctx context.Context, user *ent.Auth, plainPassword string) (*auth.LoginResponse, error) {
+	if !CheckPasswordHash(plainPassword, user.Password) {
+		return nil, status.Error(codes.Unauthenticated, "invalid username or password")
+	}
+
+	empId := ""
+	accountType := auth.AccountType_ACCOUNT_TYPE_ADMIN
+	if user.Edges.Employee != nil {
+		empId = user.Edges.Employee.ID.String()
+		accountType = auth.AccountType_ACCOUNT_TYPE_EMPLOYEE
+	}
+
+	token, err := h.tokenGenerator(ctx, user.ID.String(), empId)
+	if err != nil {
+		return nil, fmt.Errorf("error while generating token: %v", err)
+	}
+
+	return &auth.LoginResponse{
+		Token:       token,
+		User:        h.mapper.ConvertUser(user.Edges.Employee),
+		AccountType: accountType,
+	}, nil
+}
+
+type LockedAccountHandler struct{}
+
+func (h *LockedAccountHandler) Supports(state int32) bool {
+	return state == int32(gcommon.AccountState_ACCOUNT_STATE_LOCKED) ||
+		state == int32(gcommon.AccountState_ACCOUNT_STATE_SUPER_ADMIN_LOCKED)
+}
+
+func (h *LockedAccountHandler) Handle(ctx context.Context, user *ent.Auth, plainPassword string) (*auth.LoginResponse, error) {
+	if user.Password == plainPassword {
+		return &auth.LoginResponse{
+			NextStep: auth.NextStep_NEXT_STEP_REQUIRE_CHANGE_PASSWORD,
+		}, nil
+	}
+	return nil, status.Error(codes.Unauthenticated, "invalid username or password")
 }
 
 func (s *authGrpcService) ChangePassword(ctx context.Context, request *auth.ChangePasswordRequest) (*gcommon.EmptyResponse, error) {
@@ -84,6 +135,7 @@ func (s *authGrpcService) ChangePassword(ctx context.Context, request *auth.Chan
 			if e != nil {
 				return nil, fmt.Errorf("error while updating account state: %v", e)
 			}
+			return &gcommon.EmptyResponse{}, nil
 		}
 		break
 	case int32(gcommon.AccountState_ACCOUNT_STATE_SUPER_ADMIN_LOCKED):
@@ -139,40 +191,46 @@ func (s *authGrpcService) Login(ctx context.Context, request *auth.LoginRequest)
 		return nil, fmt.Errorf("error while finding user: %v", err)
 	}
 
-	accountState := user.State
-
-	switch accountState {
-	case int32(gcommon.AccountState_ACCOUNT_STATE_ACTIVE), int32(gcommon.AccountState_ACCOUNT_STATE_SUPER_ADMIN_ACTIVE):
-		empId := ""
-		if user.Edges.Employee != nil {
-			empId = user.Edges.Employee.ID.String()
+	for _, handler := range s.loginHandlers {
+		if handler.Supports(user.State) {
+			return handler.Handle(ctx, user, plainPassword)
 		}
-		accountType := auth.AccountType_ACCOUNT_TYPE_ADMIN
-		if user.Edges.Employee != nil {
-			accountType = auth.AccountType_ACCOUNT_TYPE_EMPLOYEE
-		}
-		if CheckPasswordHash(plainPassword, user.Password) {
-			token, err := s.generateToken(ctx, user.ID.String(), empId)
-			if err != nil {
-				return nil, fmt.Errorf("error while generating token: %v", err)
-			}
-			return &auth.LoginResponse{
-				Token:       token,
-				User:        s.authGrpcMapper.ConvertUser(user.Edges.Employee),
-				AccountType: accountType,
-			}, nil
-		}
-		break
-	case int32(gcommon.AccountState_ACCOUNT_STATE_SUPER_ADMIN_LOCKED), int32(gcommon.AccountState_ACCOUNT_STATE_LOCKED):
-		if user.Password == plainPassword {
-			return &auth.LoginResponse{
-				NextStep: auth.NextStep_NEXT_STEP_REQUIRE_CHANGE_PASSWORD,
-			}, nil
-		}
-		break
-	default:
-		return nil, fmt.Errorf("account is inactive")
 	}
+
+	//accountState := user.State
+
+	//switch accountState {
+	//case int32(gcommon.AccountState_ACCOUNT_STATE_ACTIVE), int32(gcommon.AccountState_ACCOUNT_STATE_SUPER_ADMIN_ACTIVE):
+	//	empId := ""
+	//	if user.Edges.Employee != nil {
+	//		empId = user.Edges.Employee.ID.String()
+	//	}
+	//	accountType := auth.AccountType_ACCOUNT_TYPE_ADMIN
+	//	if user.Edges.Employee != nil {
+	//		accountType = auth.AccountType_ACCOUNT_TYPE_EMPLOYEE
+	//	}
+	//	if CheckPasswordHash(plainPassword, user.Password) {
+	//		token, err := s.generateToken(ctx, user.ID.String(), empId)
+	//		if err != nil {
+	//			return nil, fmt.Errorf("error while generating token: %v", err)
+	//		}
+	//		return &auth.LoginResponse{
+	//			Token:       token,
+	//			User:        s.authGrpcMapper.ConvertUser(user.Edges.Employee),
+	//			AccountType: accountType,
+	//		}, nil
+	//	}
+	//	break
+	//case int32(gcommon.AccountState_ACCOUNT_STATE_SUPER_ADMIN_LOCKED), int32(gcommon.AccountState_ACCOUNT_STATE_LOCKED):
+	//	if user.Password == plainPassword {
+	//		return &auth.LoginResponse{
+	//			NextStep: auth.NextStep_NEXT_STEP_REQUIRE_CHANGE_PASSWORD,
+	//		}, nil
+	//	}
+	//	break
+	//default:
+	//	return nil, fmt.Errorf("account is inactive")
+	//}
 
 	return &auth.LoginResponse{}, status.Error(codes.Unauthenticated, "invalid username or password")
 }
@@ -219,9 +277,9 @@ func CheckPasswordHash(password, hashedPassword string) bool {
 }
 
 // GenerateJWT creates a JWT token
-func (s *authGrpcService) GenerateJWT(userID string, employeeId string) (string, error) {
+func GenerateJWT(userID string, employeeId string) (string, error) {
 	// Secret key
-	jwtSecret := []byte(s.config.GetString("JWT_SECRET", "secret"))
+	jwtSecret := []byte("sasasasa")
 	// Create claims (payload)
 	claims := jwt.MapClaims{
 		"auth_id": userID,
@@ -242,8 +300,8 @@ func (s *authGrpcService) GenerateJWT(userID string, employeeId string) (string,
 	return tokenString, nil
 }
 
-func (s *authGrpcService) generateToken(ctx context.Context, authId string, empId string) (string, error) {
-	token, err := s.GenerateJWT(authId, empId)
+func generateToken(ctx context.Context, authId string, empId string) (string, error) {
+	token, err := GenerateJWT(authId, empId)
 	if err != nil {
 		return "", fmt.Errorf("error while generating token: %v", err)
 	}
@@ -267,5 +325,6 @@ func NewAuthGrpcService(
 		config:            config,
 		authGrpcMapper:    authGrpcMapper,
 		authGrpcValidator: authGrpcValidator,
+		loginHandlers:     []LoginHandler{&ActiveAccountHandler{tokenGenerator: generateToken, mapper: authGrpcMapper}, &LockedAccountHandler{}},
 	}
 }

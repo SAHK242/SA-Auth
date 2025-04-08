@@ -1,6 +1,7 @@
 package grpcservice
 
 import (
+	"auth/ent"
 	"auth/proto/auth"
 	"auth/proto/gcommon"
 	"context"
@@ -10,6 +11,11 @@ type (
 	AuthGrpcService interface {
 		Login(context.Context, *auth.LoginRequest) (*auth.LoginResponse, error)
 		ChangePassword(ctx context.Context, request *auth.ChangePasswordRequest) (*gcommon.EmptyResponse, error)
+	}
+
+	LoginHandler interface {
+		Supports(state int32) bool
+		Handle(ctx context.Context, user *ent.Auth, plainPassword string) (*auth.LoginResponse, error)
 	}
 
 	EmployeeGrpcService interface {
