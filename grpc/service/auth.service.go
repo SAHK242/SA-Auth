@@ -196,42 +196,6 @@ func (s *authGrpcService) Login(ctx context.Context, request *auth.LoginRequest)
 			return handler.Handle(ctx, user, plainPassword)
 		}
 	}
-
-	//accountState := user.State
-
-	//switch accountState {
-	//case int32(gcommon.AccountState_ACCOUNT_STATE_ACTIVE), int32(gcommon.AccountState_ACCOUNT_STATE_SUPER_ADMIN_ACTIVE):
-	//	empId := ""
-	//	if user.Edges.Employee != nil {
-	//		empId = user.Edges.Employee.ID.String()
-	//	}
-	//	accountType := auth.AccountType_ACCOUNT_TYPE_ADMIN
-	//	if user.Edges.Employee != nil {
-	//		accountType = auth.AccountType_ACCOUNT_TYPE_EMPLOYEE
-	//	}
-	//	if CheckPasswordHash(plainPassword, user.Password) {
-	//		token, err := s.generateToken(ctx, user.ID.String(), empId)
-	//		if err != nil {
-	//			return nil, fmt.Errorf("error while generating token: %v", err)
-	//		}
-	//		return &auth.LoginResponse{
-	//			Token:       token,
-	//			User:        s.authGrpcMapper.ConvertUser(user.Edges.Employee),
-	//			AccountType: accountType,
-	//		}, nil
-	//	}
-	//	break
-	//case int32(gcommon.AccountState_ACCOUNT_STATE_SUPER_ADMIN_LOCKED), int32(gcommon.AccountState_ACCOUNT_STATE_LOCKED):
-	//	if user.Password == plainPassword {
-	//		return &auth.LoginResponse{
-	//			NextStep: auth.NextStep_NEXT_STEP_REQUIRE_CHANGE_PASSWORD,
-	//		}, nil
-	//	}
-	//	break
-	//default:
-	//	return nil, fmt.Errorf("account is inactive")
-	//}
-
 	return &auth.LoginResponse{}, status.Error(codes.Unauthenticated, "invalid username or password")
 }
 
