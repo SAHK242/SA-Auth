@@ -89,7 +89,7 @@ func (a employeeRepository) FindAllEmployee(ctx context.Context, req *auth2.List
 }
 
 func (a employeeRepository) CreateEmployee(ctx context.Context, tx *ent.Tx, request *auth2.CreateEmployeeRequest) error {
-	defaultPassword := "123456"
+	defaultPassword := "12345678@X"
 	username := strings.Split(request.GetEmail(), "@")[0]
 
 	authEmployee, err := tx.Auth.Create().
