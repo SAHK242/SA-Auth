@@ -11,6 +11,8 @@ import (
 
 var Module = fx.Provide(
 	NewAuthGrpcService,
+	NewDepartmentGrpcService,
+	NewEmployeeGrpcService,
 )
 
 func rollback(tx *ent.Tx, err error) error {

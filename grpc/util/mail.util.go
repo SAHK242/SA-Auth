@@ -5,7 +5,7 @@ import (
 	"gopkg.in/gomail.v2"
 )
 
-func SendEmail(recipientEmail string, firstname string, username string) error {
+func SendEmailWhenCreateNewEmployee(recipientEmail string, firstname string, username string) error {
 	// SMTP server details
 	smtpHost := "smtp.gmail.com"
 	smtpPort := 587

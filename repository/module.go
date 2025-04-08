@@ -30,6 +30,8 @@ var Module = fx.Provide(
 	NewEntClient,
 	NewNativeClient,
 	NewAuthRepository,
+	NewEmployeeRepository,
+	NewDepartmentRepository,
 )
 
 func NewDatasource(config config.Config) *Datasource {

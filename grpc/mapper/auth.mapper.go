@@ -48,25 +48,6 @@ func (a authGrpcMapper) ConvertUserSlice(from []*ent.Employee) []*auth.User {
 	return to
 }
 
-func (a authGrpcMapper) ConvertDepartment(from *ent.Department) *auth.Department {
-	if from == nil {
-		return nil
-	}
-	to := &auth.Department{
-		Id:   from.ID.String(),
-		Name: from.Name,
-	}
-	return to
-}
-
-func (a authGrpcMapper) ConvertDepartmentSlice(from []*ent.Department) []*auth.Department {
-	to := make([]*auth.Department, 0)
-	for _, item := range from {
-		to = append(to, a.ConvertDepartment(item))
-	}
-	return to
-}
-
 func NewAuthGrpcMapper() AuthGrpcMapper {
 	return &authGrpcMapper{}
 }

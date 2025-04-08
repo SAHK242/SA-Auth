@@ -28,19 +28,3 @@ func (c *AuthGrpcController) Login(ctx context.Context, req *auth.LoginRequest) 
 func (c *AuthGrpcController) ChangePassword(ctx context.Context, req *auth.ChangePasswordRequest) (*gcommon.EmptyResponse, error) {
 	return util.WithSafeErrBiFunction(ctx, req, c.authService.ChangePassword)
 }
-
-func (c *AuthGrpcController) CreateEmployee(ctx context.Context, req *auth.CreateEmployeeRequest) (*gcommon.EmptyResponse, error) {
-	return util.WithSafeErrBiFunction(ctx, req, c.authService.CreateEmployee)
-}
-
-func (c *AuthGrpcController) CreateDepartment(ctx context.Context, req *auth.CreateDepartmentRequest) (*gcommon.EmptyResponse, error) {
-	return util.WithSafeErrBiFunction(ctx, req, c.authService.CreateDepartment)
-}
-
-func (c *AuthGrpcController) ListEmployee(ctx context.Context, req *auth.ListEmployeeRequest) (*auth.ListEmployeeResponse, error) {
-	return util.WithSafeErrBiFunction(ctx, req, c.authService.ListEmployee)
-}
-
-func (c *AuthGrpcController) ListDepartment(ctx context.Context, req *auth.ListDepartmentRequest) (*auth.ListDepartmentResponse, error) {
-	return util.WithSafeErrBiFunction(ctx, req, c.authService.ListDepartment)
-}

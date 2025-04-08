@@ -19,6 +19,8 @@ var Module = fx.Provide(NewGrpcServer)
 type GrpcServerProps struct {
 	fx.In
 	*controller.AuthGrpcController
+	*controller.EmployeeGrpcController
+	*controller.DepartmentGrpcController
 	config.Config
 	*zap.SugaredLogger
 	ChainedInterceptor grpc.ServerOption `name:"chainedGrpcInterceptor"`
@@ -36,6 +38,8 @@ func NewGrpcServer(lifecycle fx.Lifecycle, props GrpcServerProps) *grpc.Server {
 			}
 
 			auth.RegisterAuthServiceServer(grpcServer, props.AuthGrpcController)
+			auth.RegisterEmployeeServiceServer(grpcServer, props.EmployeeGrpcController)
+			auth.RegisterDepartmentServiceServer(grpcServer, props.DepartmentGrpcController)
 
 			go func() {
 				props.SugaredLogger.Infof("gRPC server is running on %s", lis.Addr().String())
